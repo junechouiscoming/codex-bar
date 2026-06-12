@@ -2,6 +2,8 @@
 
 [English](#english) | [中文](#中文)
 
+![CodexBar screenshot](assets/codexbar-screenshot.png)
+
 ## English
 
 CodexBar is a native macOS menu bar app for Apple Silicon. It shows your Codex
