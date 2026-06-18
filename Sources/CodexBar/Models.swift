@@ -7,6 +7,7 @@ struct QuotaSnapshot: Equatable {
     var planName: String
     var fiveHour: QuotaWindow
     var sevenDay: QuotaWindow
+    var availableResetCount: Int?
     var monthlyTokenUsage: MonthlyTokenUsage
     var fetchedAt: Date
 }
@@ -56,6 +57,7 @@ extension QuotaSnapshot {
                 remainingPercent: 100,
                 resetAt: nil
             ),
+            availableResetCount: nil,
             monthlyTokenUsage: .placeholder,
             fetchedAt: Date()
         )

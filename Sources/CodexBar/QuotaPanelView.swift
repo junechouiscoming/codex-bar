@@ -10,12 +10,25 @@ struct QuotaPanelView: View {
     @State private var didDismissIntervalPickerFromMonitor = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             header
 
-            VStack(spacing: 8) {
+            VStack(spacing: 7) {
                 QuotaRow(window: store.snapshot.fiveHour, animationID: store.quotaAnimationID)
                 QuotaRow(window: store.snapshot.sevenDay, animationID: store.quotaAnimationID)
+
+                if let availableResetCount = store.snapshot.availableResetCount {
+                    HStack {
+                        Spacer(minLength: 0)
+
+                        Text("\(availableResetCount) 次可用重置")
+                            .font(.system(size: 9.5, weight: .medium, design: .rounded))
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                            .frame(width: 76, alignment: .trailing)
+                    }
+                    .frame(height: 10)
+                }
             }
 
             Divider()
@@ -28,8 +41,9 @@ struct QuotaPanelView: View {
             footer
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .frame(width: 440, height: 232)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
+        .frame(width: 440, height: 282)
         .overlay(alignment: .bottomTrailing) {
             intervalPickerOverlay
         }
@@ -93,7 +107,7 @@ struct QuotaPanelView: View {
         HStack(alignment: .center, spacing: 0) {
             Spacer(minLength: 0)
 
-            HStack(alignment: .center, spacing: 4) {
+            HStack(alignment: .center, spacing: 1) {
                 RefreshButton(isRefreshing: store.isRefreshing) {
                     isIntervalPickerVisible = false
                     Task {
@@ -117,7 +131,7 @@ struct QuotaPanelView: View {
                 .lineLimit(1)
                 .animation(.easeInOut(duration: 0.18), value: footerStatusText)
             }
-            .frame(height: 18)
+            .frame(width: 110, height: 18, alignment: .trailing)
         }
         .frame(height: 18)
     }
@@ -176,7 +190,8 @@ struct QuotaPanelView: View {
             .id("updated-\(refreshTimeText)")
             .font(.system(size: 10.5, weight: .semibold, design: .rounded))
             .foregroundStyle(.primary.opacity(isUpdateHovered || isIntervalPickerVisible ? 0.78 : 0.62))
-            .padding(.horizontal, 6)
+            .padding(.leading, 6)
+            .padding(.trailing, 0)
             .padding(.vertical, 3)
             .background {
                 Capsule(style: .continuous)
@@ -493,7 +508,7 @@ struct MonthlyTokenUsageSection: View {
             }
 
             TokenUsageStrip(usage: usage)
-                .frame(height: 16)
+                .frame(height: 46)
         }
     }
 
@@ -566,14 +581,24 @@ struct TokenUsageStrip: View {
             ZStack(alignment: .topLeading) {
                 HStack(spacing: gap) {
                     ForEach(Array(days.enumerated()), id: \.element.id) { index, day in
-                        RoundedRectangle(cornerRadius: 3.5, style: .continuous)
-                            .fill(color(for: day))
-                            .frame(width: width, height: proxy.size.height)
-                            .onHover { isHovering in
-                                withAnimation(.easeInOut(duration: 0.12)) {
-                                    hoveredIndex = isHovering && !day.isFuture ? index : nil
-                                }
+                        ZStack(alignment: .bottom) {
+                            RoundedRectangle(cornerRadius: 3.5, style: .continuous)
+                                .fill(Color.primary.opacity(day.isFuture ? 0.025 : 0.045))
+                                .frame(width: width, height: proxy.size.height)
+
+                            RoundedRectangle(cornerRadius: 3.5, style: .continuous)
+                                .fill(barColor(for: day))
+                                .frame(width: width, height: barHeight(for: day, in: proxy.size.height))
+                        }
+                        .frame(width: width, height: proxy.size.height, alignment: .bottom)
+                        .opacity(day.isFuture ? 0.5 : 1)
+                        .contentShape(Rectangle())
+                        .onHover { isHovering in
+                            withAnimation(.easeInOut(duration: 0.12)) {
+                                hoveredIndex = isHovering && !day.isFuture ? index : nil
                             }
+                        }
+                        .animation(.easeOut(duration: 0.18), value: day.tokens)
                     }
                 }
 
@@ -625,17 +650,30 @@ struct TokenUsageStrip: View {
         return text.replacingOccurrences(of: ".0", with: "") + suffix
     }
 
-    private func color(for day: DailyTokenUsage) -> Color {
-        if day.isFuture {
-            return Color.primary.opacity(0.035)
+    private func barHeight(for day: DailyTokenUsage, in availableHeight: CGFloat) -> CGFloat {
+        guard !day.isFuture else {
+            return 0
         }
 
         guard day.tokens > 0, usage.peakTokens > 0 else {
-            return Color(red: 0.86, green: 0.91, blue: 0.98).opacity(0.65)
+            return max(3, availableHeight * 0.16)
         }
 
         let ratio = min(1, Double(day.tokens) / Double(usage.peakTokens))
-        return Color(red: 0.20, green: 0.48, blue: 0.86).opacity(0.28 + ratio * 0.72)
+        return max(4, availableHeight * CGFloat(0.18 + ratio * 0.82))
+    }
+
+    private func barColor(for day: DailyTokenUsage) -> Color {
+        if day.isFuture {
+            return .clear
+        }
+
+        guard day.tokens > 0, usage.peakTokens > 0 else {
+            return Color(red: 0.78, green: 0.86, blue: 0.96).opacity(0.5)
+        }
+
+        let ratio = min(1, Double(day.tokens) / Double(usage.peakTokens))
+        return Color(red: 0.20, green: 0.48, blue: 0.86).opacity(0.38 + ratio * 0.62)
     }
 }
 
@@ -648,23 +686,48 @@ private extension View {
     func liquidGlassPanel(cornerRadius: CGFloat) -> some View {
         if #available(macOS 26.0, *) {
             self
-                .background(Color.white.opacity(0.04))
+                .background {
+                    VisualEffectBackdrop(material: .popover, blendingMode: .behindWindow)
+                        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                        .opacity(0.78)
+                }
                 .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .stroke(.white.opacity(0.26), lineWidth: 0.8)
+                        .stroke(.white.opacity(0.18), lineWidth: 0.8)
                 }
         } else {
             self
                 .background {
-                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .fill(.regularMaterial)
+                    VisualEffectBackdrop(material: .popover, blendingMode: .behindWindow)
+                        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                        .opacity(0.78)
                         .overlay {
                             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                                .stroke(.white.opacity(0.26), lineWidth: 0.8)
+                                .stroke(.white.opacity(0.18), lineWidth: 0.8)
                         }
                 }
         }
+    }
+}
+
+private struct VisualEffectBackdrop: NSViewRepresentable {
+    var material: NSVisualEffectView.Material
+    var blendingMode: NSVisualEffectView.BlendingMode
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = material
+        view.blendingMode = blendingMode
+        view.state = .active
+        view.wantsLayer = true
+        return view
+    }
+
+    func updateNSView(_ view: NSVisualEffectView, context: Context) {
+        view.material = material
+        view.blendingMode = blendingMode
+        view.state = .active
     }
 }
 

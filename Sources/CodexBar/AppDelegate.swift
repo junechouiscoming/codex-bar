@@ -6,7 +6,7 @@ import SwiftUI
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private enum PanelMetrics {
-        static let size = NSSize(width: 440, height: 232)
+        static let size = NSSize(width: 440, height: 282)
     }
 
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -139,6 +139,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.hasShadow = true
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         window.contentViewController = hostingController
+        hostingController.view.wantsLayer = true
+        hostingController.view.layer?.backgroundColor = NSColor.clear.cgColor
         window.setContentSize(PanelMetrics.size)
         panelWindow = window
         return window
