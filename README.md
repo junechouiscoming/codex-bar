@@ -50,13 +50,13 @@ open dist/CodexBar.app
 Build a release DMG:
 
 ```bash
-scripts/build-dmg.sh 1.0
+scripts/build-dmg.sh 1.1
 ```
 
 The DMG is written to:
 
 ```text
-release/CodexBar-1.0-arm64.dmg
+release/CodexBar-1.1-arm64.dmg
 ```
 
 ## 中文
@@ -103,11 +103,11 @@ open dist/CodexBar.app
 构建发布用 DMG：
 
 ```bash
-scripts/build-dmg.sh 1.0
+scripts/build-dmg.sh 1.1
 ```
 
 DMG 输出位置：
 
 ```text
-release/CodexBar-1.0-arm64.dmg
+release/CodexBar-1.1-arm64.dmg
 ```

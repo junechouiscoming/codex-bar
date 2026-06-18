@@ -104,6 +104,7 @@ struct CodexQuotaService: CodexQuotaFetching {
                 title: "周限额",
                 apiWindow: usage.rateLimit.secondaryWindow
             ),
+            availableResetCount: usage.rateLimitResetCredits?.availableCount,
             monthlyTokenUsage: monthlyTokenUsage,
             fetchedAt: Date()
         )
@@ -211,6 +212,7 @@ struct UsageResponse: Decodable {
     var email: String?
     var planType: String?
     var rateLimit: RateLimitResponse
+    var rateLimitResetCredits: RateLimitResetCreditsResponse?
 }
 
 struct RateLimitResponse: Decodable {
@@ -223,6 +225,10 @@ struct RateLimitWindowResponse: Decodable {
     var limitWindowSeconds: Int?
     var resetAfterSeconds: Int?
     var resetAt: TimeInterval?
+}
+
+struct RateLimitResetCreditsResponse: Decodable {
+    var availableCount: Int
 }
 
 struct ProfileResponse: Decodable {
