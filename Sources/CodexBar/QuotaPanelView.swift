@@ -5,6 +5,7 @@ struct QuotaPanelView: View {
     @ObservedObject var store: QuotaStore
     @State private var isProfileHovered = false
     @State private var isUpdateHovered = false
+    @State private var isResetCreditsHovered = false
     @State private var isIntervalPickerVisible = false
     @State private var intervalDismissMonitor: Any?
     @State private var didDismissIntervalPickerFromMonitor = false
@@ -21,20 +22,22 @@ struct QuotaPanelView: View {
                     HStack {
                         Spacer(minLength: 0)
 
-                        Text("\(availableResetCount) 次可用重置")
-                            .font(.system(size: 9.5, weight: .medium, design: .rounded))
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
-                            .frame(width: 76, alignment: .trailing)
+                        ResetCreditsSummary(
+                            availableCount: availableResetCount,
+                            credits: store.snapshot.resetCredits,
+                            isHovered: $isResetCreditsHovered
+                        )
                     }
                     .frame(height: 10)
                 }
             }
+            .zIndex(2)
 
             Divider()
                 .opacity(0.45)
 
             MonthlyTokenUsageSection(usage: store.snapshot.monthlyTokenUsage)
+                .zIndex(0)
 
             Spacer(minLength: 4)
 
@@ -236,6 +239,135 @@ struct QuotaPanelView: View {
             at: URL(fileURLWithPath: "/Applications/Codex.app"),
             configuration: NSWorkspace.OpenConfiguration()
         )
+    }
+}
+
+private struct ResetCreditsSummary: View {
+    var availableCount: Int
+    var credits: [ResetCreditInfo]
+    @Binding var isHovered: Bool
+    @State private var hideTask: Task<Void, Never>?
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "info.circle")
+                .font(.system(size: 8.5, weight: .semibold))
+                .symbolRenderingMode(.monochrome)
+
+            Text("\(availableCount) 次可用重置")
+                .font(.system(size: 9.5, weight: .medium, design: .rounded))
+                .monospacedDigit()
+        }
+            .foregroundStyle(Color.secondary)
+            .frame(width: 90, alignment: .trailing)
+            .contentShape(Rectangle())
+            .overlay(alignment: .topTrailing) {
+                ResetCreditsPopover(credits: credits)
+                    .offset(y: 12)
+                    .opacity(isHovered ? 1 : 0)
+                    .allowsHitTesting(false)
+                    .zIndex(4)
+            }
+            .animation(.easeInOut(duration: 0.16), value: isHovered)
+            .onHover { hovering in
+                if hovering {
+                    showPopover()
+                } else {
+                    scheduleHide()
+                }
+            }
+            .onDisappear {
+                hideTask?.cancel()
+            }
+    }
+
+    private func showPopover() {
+        hideTask?.cancel()
+        hideTask = nil
+
+        if !isHovered {
+            isHovered = true
+        }
+    }
+
+    private func scheduleHide() {
+        hideTask?.cancel()
+        hideTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(120))
+
+            if Task.isCancelled {
+                return
+            }
+
+            isHovered = false
+            hideTask = nil
+        }
+    }
+}
+
+private struct ResetCreditsPopover: View {
+    var credits: [ResetCreditInfo]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            ResetCreditsHeader()
+            if credits.isEmpty {
+                Text("暂无过期时间")
+                    .font(.system(size: 10.5, weight: .medium, design: .rounded))
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(credits) { credit in
+                        ResetCreditExpiryRow(credit: credit)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 7)
+        .frame(width: 278, alignment: .leading)
+        .background {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(.regularMaterial)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .stroke(.white.opacity(0.22), lineWidth: 0.8)
+                }
+                .shadow(color: .black.opacity(0.14), radius: 9, x: 0, y: 3)
+        }
+    }
+}
+
+private struct ResetCreditsHeader: View {
+    var body: some View {
+        HStack(spacing: 8) {
+            Text("标题")
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text("过期时间")
+                .frame(width: 102, alignment: .trailing)
+        }
+        .font(.system(size: 10.5, weight: .bold, design: .rounded))
+        .foregroundStyle(.primary.opacity(0.66))
+    }
+}
+
+private struct ResetCreditExpiryRow: View {
+    var credit: ResetCreditInfo
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(credit.title ?? "--")
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .lineLimit(1)
+                .truncationMode(.tail)
+
+            Text(DateFormatter.codexResetCreditMinute.stringOrPlaceholder(from: credit.expiresAt))
+                .frame(width: 102, alignment: .trailing)
+                .monospacedDigit()
+        }
+        .font(.system(size: 10.5, weight: .medium, design: .rounded))
+        .foregroundStyle(.secondary)
     }
 }
 
@@ -857,4 +989,28 @@ extension DateFormatter {
         formatter.dateFormat = "M月d日"
         return formatter
     }()
+
+    static let codexResetCredit: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter
+    }()
+
+    static let codexResetCreditMinute: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm"
+        return formatter
+    }()
+
+    func stringOrPlaceholder(from date: Date?) -> String {
+        guard let date else {
+            return "--"
+        }
+
+        return string(from: date)
+    }
 }

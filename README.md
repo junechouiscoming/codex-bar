@@ -16,12 +16,16 @@ login stored by the Codex app or CLI.
 - Anchored macOS-style panel with avatar, username, and subscription tier.
 - Segmented quota bars for the 5-hour limit and weekly limit.
 - Reset time display for each quota window.
+- Available reset credit count with a hover table for credit titles and expiry
+  times.
 - Monthly token heatmap with instant hover tooltips.
 - Usage summary for yesterday, this month's daily average, monthly total, and
   all-time total.
 - Manual refresh button with a smooth refresh-time transition.
 - Configurable background refresh interval: 1, 5, 15, or 30 minutes.
-- Right-click menu bar icon to quit.
+- Token usage notifications after Codex responses, plus quota reset reminder
+  notifications.
+- Right-click menu bar icon to toggle notifications or quit.
 
 CodexBar reads local Codex authentication data and refreshes tokens when needed.
 If the panel reports an auth error, run `codex login` or sign in with the Codex
@@ -50,13 +54,13 @@ open dist/CodexBar.app
 Build a release DMG:
 
 ```bash
-scripts/build-dmg.sh 1.1
+scripts/build-dmg.sh 1.2
 ```
 
 The DMG is written to:
 
 ```text
-release/CodexBar-1.1-arm64.dmg
+release/CodexBar-1.2-arm64.dmg
 ```
 
 ## 中文
@@ -71,11 +75,13 @@ Codex 登录信息，在菜单栏展示 Codex 额度，并通过一个紧凑的 
 - 点击菜单栏图标弹出吸附式面板，展示头像、用户名和订阅等级。
 - 用分段色块展示 5 小时额度和周限额。
 - 显示每个额度窗口的重置时间。
+- 显示剩余可用重置次数，鼠标悬停可查看每个重置额度的标题和过期时间。
 - 展示当月 token 使用热力图，鼠标划过色块会立即显示当日用量。
 - 展示昨日使用、本月日均、当月累计和总累计 token。
 - 支持手动刷新，并带有刷新时间的渐隐切换。
 - 支持设置后台刷新间隔：1、5、15、30 分钟。
-- 右键菜单栏图标可以退出应用。
+- 支持 Codex 回答完成后的 token 用量通知，以及额度重置提醒通知。
+- 右键菜单栏图标可以开关通知或退出应用。
 
 CodexBar 会复用本地 Codex 的登录状态，并在需要时刷新 token。如果面板提示认证
 错误，请先执行 `codex login`，或打开 Codex app 登录后再重新打开 CodexBar。
@@ -103,11 +109,11 @@ open dist/CodexBar.app
 构建发布用 DMG：
 
 ```bash
-scripts/build-dmg.sh 1.1
+scripts/build-dmg.sh 1.2
 ```
 
 DMG 输出位置：
 
 ```text
-release/CodexBar-1.1-arm64.dmg
+release/CodexBar-1.2-arm64.dmg
 ```
