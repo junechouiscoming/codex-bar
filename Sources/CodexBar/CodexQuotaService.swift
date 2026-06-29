@@ -27,9 +27,17 @@ struct CodexQuotaService: CodexQuotaFetching {
             endpoint: "https://chatgpt.com/backend-api/wham/profiles/me",
             credentials: credentials
         )
+
+        async let resetCredits = getOptional(
+            ResetCreditsDetailResponse.self,
+            endpoint: "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits",
+            credentials: credentials
+        )
+
         return try await makeSnapshot(
             usage: usage,
             profile: profile,
+            resetCredits: resetCredits,
             credentials: credentials
         )
     }
@@ -76,9 +84,23 @@ struct CodexQuotaService: CodexQuotaFetching {
         }
     }
 
+    private func getOptional<T: Decodable>(
+        _ type: T.Type,
+        endpoint: String,
+        credentials: CodexCredentials
+    ) async -> T? {
+        do {
+            return try await get(type, endpoint: endpoint, credentials: credentials)
+        } catch {
+            AppLog.write("Optional quota endpoint failed: \(endpoint), error: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
     private func makeSnapshot(
         usage: UsageResponse,
         profile: ProfileResponse,
+        resetCredits: ResetCreditsDetailResponse?,
         credentials: CodexCredentials
     ) -> QuotaSnapshot {
         let profileInfo = profile.profile
@@ -104,7 +126,8 @@ struct CodexQuotaService: CodexQuotaFetching {
                 title: "周限额",
                 apiWindow: usage.rateLimit.secondaryWindow
             ),
-            availableResetCount: usage.rateLimitResetCredits?.availableCount,
+            availableResetCount: resetCredits?.availableCount ?? usage.rateLimitResetCredits?.availableCount,
+            resetCredits: makeResetCredits(from: resetCredits),
             monthlyTokenUsage: monthlyTokenUsage,
             fetchedAt: Date()
         )
@@ -171,6 +194,39 @@ struct CodexQuotaService: CodexQuotaFetching {
         )
     }
 
+    private func makeResetCredits(from response: ResetCreditsDetailResponse?) -> [ResetCreditInfo] {
+        response?.credits.map { credit in
+            ResetCreditInfo(
+                status: credit.status,
+                title: credit.title,
+                grantedAt: parseAPIDate(credit.grantedAt),
+                expiresAt: parseAPIDate(credit.expiresAt)
+            )
+        } ?? []
+    }
+
+    private func parseAPIDate(_ value: String?) -> Date? {
+        guard let value, !value.isEmpty else {
+            return nil
+        }
+
+        let fractionalFormatter = ISO8601DateFormatter()
+        fractionalFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let standardFormatter = ISO8601DateFormatter()
+        standardFormatter.formatOptions = [.withInternetDateTime]
+
+        if let date = fractionalFormatter.date(from: value)
+            ?? standardFormatter.date(from: value) {
+            return date
+        }
+
+        if let timestamp = TimeInterval(value) {
+            return Date(timeIntervalSince1970: timestamp)
+        }
+
+        return nil
+    }
+
     private func formatPlan(_ value: String?) -> String {
         guard let value, !value.isEmpty else {
             return "Unknown"
@@ -229,6 +285,18 @@ struct RateLimitWindowResponse: Decodable {
 
 struct RateLimitResetCreditsResponse: Decodable {
     var availableCount: Int
+}
+
+struct ResetCreditsDetailResponse: Decodable {
+    var availableCount: Int?
+    var credits: [ResetCreditResponse]
+}
+
+struct ResetCreditResponse: Decodable {
+    var status: String?
+    var title: String?
+    var grantedAt: String?
+    var expiresAt: String?
 }
 
 struct ProfileResponse: Decodable {

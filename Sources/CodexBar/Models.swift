@@ -8,6 +8,7 @@ struct QuotaSnapshot: Equatable {
     var fiveHour: QuotaWindow
     var sevenDay: QuotaWindow
     var availableResetCount: Int?
+    var resetCredits: [ResetCreditInfo]
     var monthlyTokenUsage: MonthlyTokenUsage
     var fetchedAt: Date
 }
@@ -21,6 +22,22 @@ struct QuotaWindow: Equatable, Identifiable {
     var clampedPercent: Double {
         min(100, max(0, remainingPercent))
     }
+}
+
+struct ResetCreditInfo: Equatable, Identifiable {
+    var id: String {
+        [
+            status ?? "",
+            title ?? "",
+            grantedAt.map { String($0.timeIntervalSince1970) } ?? "",
+            expiresAt.map { String($0.timeIntervalSince1970) } ?? ""
+        ].joined(separator: "|")
+    }
+
+    var status: String?
+    var title: String?
+    var grantedAt: Date?
+    var expiresAt: Date?
 }
 
 struct MonthlyTokenUsage: Equatable {
@@ -58,6 +75,7 @@ extension QuotaSnapshot {
                 resetAt: nil
             ),
             availableResetCount: nil,
+            resetCredits: [],
             monthlyTokenUsage: .placeholder,
             fetchedAt: Date()
         )

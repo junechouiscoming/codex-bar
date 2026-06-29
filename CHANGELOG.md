@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.2 - 2026-06-29
+
+### English
+
+- Added reset credit expiry details in a hover table next to the remaining reset count.
+- Added token usage notifications after Codex responses.
+- Added quota reset reminder notifications for the 5-hour and weekly quota windows.
+- Added right-click menu toggles for token and quota notifications.
+- Added a generated app icon to the packaged app bundle.
+
+### 中文
+
+- 在剩余重置次数旁新增悬停表格，展示每个重置额度的标题和过期时间。
+- 新增 Codex 回答完成后的 token 用量通知。
+- 新增 5 小时额度和周额度的重置提醒通知。
+- 新增右键菜单中的 token 通知和额度通知开关。
+- 为打包后的 app bundle 新增生成式应用图标。
+
 ## 1.1 - 2026-06-18
 
 ### English

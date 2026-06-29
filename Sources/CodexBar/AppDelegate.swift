@@ -2,24 +2,35 @@ import AppKit
 import Combine
 import QuartzCore
 import SwiftUI
+import UserNotifications
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     private enum PanelMetrics {
         static let size = NSSize(width: 440, height: 282)
     }
 
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let store = QuotaStore(service: CodexQuotaService())
+    private let notificationSettings = NotificationSettings()
+    private let notifier = CodexNotifier()
+    private let tokenUsageMonitor = TokenUsageMonitor()
     private var panelWindow: NSWindow?
     private var statusPercent: Double?
+    private var quotaNotificationTimer: Timer?
+    private var lastQuotaNotificationCheckAt = Date()
+    private var firedQuotaNotificationKeys = Set<String>()
     private var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppLog.write("applicationDidFinishLaunching")
+        configureApplicationIcon()
         configureStatusItem()
+        configureNotifications()
         observeStore()
         observeAppearanceChanges()
+        startTokenUsageMonitor()
+        startQuotaResetNotificationTimer()
         store.startBackgroundRefresh()
 
         Task { [weak self] in
@@ -30,6 +41,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         store.stopBackgroundRefresh()
+        quotaNotificationTimer?.invalidate()
+        Task {
+            await tokenUsageMonitor.stop()
+        }
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        [.banner, .sound]
     }
 
     func applicationDidResignActive(_ notification: Notification) {
@@ -54,6 +76,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateStatusItem(percent: nil)
 
         AppLog.write("status item configured")
+    }
+
+    private func configureApplicationIcon() {
+        guard let iconURL = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
+              let image = NSImage(contentsOf: iconURL) else {
+            AppLog.write("application icon not found")
+            return
+        }
+
+        NSApp.applicationIconImage = image
+        AppLog.write("application icon configured")
+    }
+
+    private func configureNotifications() {
+        UNUserNotificationCenter.current().delegate = self
+        notifier.requestAuthorization()
+    }
+
+    private func startTokenUsageMonitor() {
+        Task {
+            await tokenUsageMonitor.start { [weak self] usage in
+                await MainActor.run {
+                    self?.sendTokenUsageNotification(usage)
+                }
+            }
+        }
+    }
+
+    private func startQuotaResetNotificationTimer() {
+        quotaNotificationTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.checkQuotaResetNotifications()
+            }
+        }
     }
 
     @objc private func handleStatusItemClick(_ sender: NSStatusBarButton) {
@@ -158,6 +214,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .sink { [weak self] snapshot in
                 let isPlaceholder = snapshot.planName == "Loading"
                 self?.updateStatusItem(percent: isPlaceholder ? nil : snapshot.fiveHour.clampedPercent)
+                self?.checkQuotaResetNotifications()
             }
             .store(in: &cancellables)
     }
@@ -258,6 +315,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let menu = NSMenu()
+        let tokenItem = NSMenuItem(title: "Token 通知", action: #selector(toggleTokenNotifications), keyEquivalent: "")
+        tokenItem.target = self
+        tokenItem.state = notificationSettings.tokenNotificationsEnabled ? .on : .off
+        menu.addItem(tokenItem)
+
+        let quotaItem = NSMenuItem(title: "额度通知", action: #selector(toggleQuotaNotifications), keyEquivalent: "")
+        quotaItem.target = self
+        quotaItem.state = notificationSettings.quotaNotificationsEnabled ? .on : .off
+        menu.addItem(quotaItem)
+
+        menu.addItem(.separator())
+
         let quitItem = NSMenuItem(title: "退出", action: #selector(quit), keyEquivalent: "")
         quitItem.target = self
         menu.addItem(quitItem)
@@ -267,7 +336,116 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setStatusHighlighted(false)
     }
 
+    @objc private func toggleTokenNotifications() {
+        notificationSettings.tokenNotificationsEnabled.toggle()
+    }
+
+    @objc private func toggleQuotaNotifications() {
+        notificationSettings.quotaNotificationsEnabled.toggle()
+    }
+
     @objc private func quit() {
         NSApp.terminate(nil)
+    }
+
+    private func sendTokenUsageNotification(_ usage: TokenUsage) {
+        guard notificationSettings.tokenNotificationsEnabled else {
+            return
+        }
+
+        notifier.send(
+            title: "本轮回答消耗 \(tokenText(usage.totalTokens)) token",
+            body: "输入 \(tokenText(usage.inputTokens)) / 输出 \(tokenText(usage.outputTokens))"
+        )
+    }
+
+    private func checkQuotaResetNotifications() {
+        guard notificationSettings.quotaNotificationsEnabled else {
+            lastQuotaNotificationCheckAt = Date()
+            return
+        }
+
+        let now = Date()
+        defer { lastQuotaNotificationCheckAt = now }
+
+        checkQuotaResetNotification(for: store.snapshot.fiveHour)
+        checkQuotaResetNotification(for: store.snapshot.sevenDay)
+    }
+
+    private func checkQuotaResetNotification(for window: QuotaWindow) {
+        guard let resetAt = window.resetAt else {
+            return
+        }
+
+        let remaining = resetAt.timeIntervalSinceNow
+        guard remaining > 0 else {
+            return
+        }
+
+        for threshold in [7200, 3600, 1800, 180] {
+            let thresholdValue = TimeInterval(threshold)
+            let previousRemaining = resetAt.timeIntervalSince(lastQuotaNotificationCheckAt)
+            guard remaining <= thresholdValue, previousRemaining > thresholdValue else {
+                continue
+            }
+
+            let key = "\(window.id)-\(Int(resetAt.timeIntervalSince1970))-\(threshold)"
+            guard !firedQuotaNotificationKeys.contains(key) else {
+                continue
+            }
+
+            firedQuotaNotificationKeys.insert(key)
+            notifier.send(
+                title: "Codex额度重置通知",
+                body: "\(quotaWindowName(window))距离重置还有\(quotaRemainingText(seconds: threshold))"
+            )
+        }
+    }
+
+    private func tokenText(_ tokens: Int) -> String {
+        if tokens == 0 {
+            return "0"
+        }
+
+        if tokens >= 100_000_000 {
+            return compact(Double(tokens) / 100_000_000, suffix: "亿")
+        }
+
+        if tokens < 10_000 {
+            return "\(tokens)"
+        }
+
+        return compact(Double(tokens) / 10_000, suffix: "万")
+    }
+
+    private func compact(_ value: Double, suffix: String) -> String {
+        let text = String(format: value >= 10 ? "%.0f" : "%.1f", value)
+        return text.replacingOccurrences(of: ".0", with: "") + suffix
+    }
+
+    private func quotaRemainingText(seconds: Int) -> String {
+        switch seconds {
+        case 7200:
+            return "2小时"
+        case 3600:
+            return "1小时"
+        case 1800:
+            return "30分钟"
+        case 180:
+            return "3分钟"
+        default:
+            return "\(seconds / 60)分钟"
+        }
+    }
+
+    private func quotaWindowName(_ window: QuotaWindow) -> String {
+        switch window.id {
+        case "primary":
+            return "5小时额度"
+        case "secondary":
+            return "周额度"
+        default:
+            return "\(window.title)额度"
+        }
     }
 }
