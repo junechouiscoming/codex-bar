@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.2.1 - 2026-06-29
+
+### English
+
+- Added subscription expiry and renewal times to the plan badge hover popover.
+- Refined reset credit hover popovers to show grant and expiry times in a compact two-column layout.
+- Matched hover date formatting with quota reset timestamps by using `M月d日 HH:mm`.
+
+### 中文
+
+- 在套餐标签悬停气泡中新增订阅过期时间和续费时间。
+- 优化重置额度悬停气泡，使用紧凑的两列表格展示发放时间和过期时间。
+- 将悬停气泡时间格式统一为 `M月d日 HH:mm`，与额度重置时间保持一致。
+
 ## 1.2 - 2026-06-29
 
 ### English

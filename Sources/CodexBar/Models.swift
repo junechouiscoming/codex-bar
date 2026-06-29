@@ -5,6 +5,8 @@ struct QuotaSnapshot: Equatable {
     var displayName: String
     var avatarURL: URL?
     var planName: String
+    var planExpiresAt: Date?
+    var planRenewsAt: Date?
     var fiveHour: QuotaWindow
     var sevenDay: QuotaWindow
     var availableResetCount: Int?
@@ -62,6 +64,8 @@ extension QuotaSnapshot {
             displayName: "Codex",
             avatarURL: nil,
             planName: "Loading",
+            planExpiresAt: nil,
+            planRenewsAt: nil,
             fiveHour: QuotaWindow(
                 id: "primary",
                 title: "5小时",
