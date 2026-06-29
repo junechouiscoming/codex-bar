@@ -34,10 +34,17 @@ struct CodexQuotaService: CodexQuotaFetching {
             credentials: credentials
         )
 
+        async let accountCheck = getOptional(
+            AccountCheckResponse.self,
+            endpoint: "https://chatgpt.com/backend-api/accounts/check/v4-2023-04-27",
+            credentials: credentials
+        )
+
         return try await makeSnapshot(
             usage: usage,
             profile: profile,
             resetCredits: resetCredits,
+            accountCheck: accountCheck,
             credentials: credentials
         )
     }
@@ -101,6 +108,7 @@ struct CodexQuotaService: CodexQuotaFetching {
         usage: UsageResponse,
         profile: ProfileResponse,
         resetCredits: ResetCreditsDetailResponse?,
+        accountCheck: AccountCheckResponse?,
         credentials: CodexCredentials
     ) -> QuotaSnapshot {
         let profileInfo = profile.profile
@@ -116,6 +124,8 @@ struct CodexQuotaService: CodexQuotaFetching {
             displayName: displayName,
             avatarURL: profileInfo.profilePictureURL,
             planName: formatPlan(usage.planType ?? credentials.planType),
+            planExpiresAt: makePlanExpiresAt(from: accountCheck),
+            planRenewsAt: makePlanRenewsAt(from: accountCheck),
             fiveHour: makeWindow(
                 id: "primary",
                 title: "5小时",
@@ -203,6 +213,24 @@ struct CodexQuotaService: CodexQuotaFetching {
                 expiresAt: parseAPIDate(credit.expiresAt)
             )
         } ?? []
+    }
+
+    private func makePlanExpiresAt(from response: AccountCheckResponse?) -> Date? {
+        parseAPIDate(planEntitlement(from: response)?.expiresAt)
+    }
+
+    private func makePlanRenewsAt(from response: AccountCheckResponse?) -> Date? {
+        parseAPIDate(planEntitlement(from: response)?.renewsAt)
+    }
+
+    private func planEntitlement(from response: AccountCheckResponse?) -> AccountEntitlement? {
+        guard let accounts = response?.accounts else {
+            return nil
+        }
+
+        return accounts["default"]?.entitlement
+            ?? accounts.values.first { $0.entitlement?.hasActiveSubscription == true }?.entitlement
+            ?? accounts.values.first?.entitlement
     }
 
     private func parseAPIDate(_ value: String?) -> Date? {
@@ -297,6 +325,20 @@ struct ResetCreditResponse: Decodable {
     var title: String?
     var grantedAt: String?
     var expiresAt: String?
+}
+
+struct AccountCheckResponse: Decodable {
+    var accounts: [String: AccountCheckAccount]
+}
+
+struct AccountCheckAccount: Decodable {
+    var entitlement: AccountEntitlement?
+}
+
+struct AccountEntitlement: Decodable {
+    var hasActiveSubscription: Bool?
+    var expiresAt: String?
+    var renewsAt: String?
 }
 
 struct ProfileResponse: Decodable {

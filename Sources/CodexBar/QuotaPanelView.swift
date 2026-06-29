@@ -4,6 +4,7 @@ import SwiftUI
 struct QuotaPanelView: View {
     @ObservedObject var store: QuotaStore
     @State private var isProfileHovered = false
+    @State private var isPlanHovered = false
     @State private var isUpdateHovered = false
     @State private var isResetCreditsHovered = false
     @State private var isIntervalPickerVisible = false
@@ -13,6 +14,7 @@ struct QuotaPanelView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             header
+                .zIndex(3)
 
             VStack(spacing: 7) {
                 QuotaRow(window: store.snapshot.fiveHour, animationID: store.quotaAnimationID)
@@ -94,15 +96,12 @@ struct QuotaPanelView: View {
 
             Spacer()
 
-            Text(store.snapshot.planName)
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                .foregroundStyle(Color(red: 0.08, green: 0.34, blue: 0.28))
-                .padding(.horizontal, 9)
-                .padding(.vertical, 5)
-                .background {
-                    Capsule(style: .continuous)
-                        .fill(Color(red: 0.78, green: 0.94, blue: 0.88).opacity(0.95))
-                }
+            PlanBadge(
+                planName: store.snapshot.planName,
+                expiresAt: store.snapshot.planExpiresAt,
+                renewsAt: store.snapshot.planRenewsAt,
+                isHovered: $isPlanHovered
+            )
         }
     }
 
@@ -305,6 +304,61 @@ private struct ResetCreditsSummary: View {
     }
 }
 
+private struct PlanBadge: View {
+    var planName: String
+    var expiresAt: Date?
+    var renewsAt: Date?
+    @Binding var isHovered: Bool
+
+    var body: some View {
+        Text(planName)
+            .font(.system(size: 12, weight: .semibold, design: .rounded))
+            .foregroundStyle(Color(red: 0.08, green: 0.34, blue: 0.28))
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background {
+                Capsule(style: .continuous)
+                    .fill(Color(red: 0.78, green: 0.94, blue: 0.88).opacity(0.95))
+            }
+            .contentShape(Capsule(style: .continuous))
+            .overlay(alignment: .topTrailing) {
+                PlanExpiryPopover(expiresAt: expiresAt, renewsAt: renewsAt)
+                    .offset(y: 32)
+                    .opacity(isHovered ? 1 : 0)
+                    .allowsHitTesting(false)
+                    .zIndex(4)
+            }
+            .animation(.easeInOut(duration: 0.16), value: isHovered)
+            .onHover { hovering in
+                isHovered = hovering
+            }
+    }
+}
+
+private struct PlanExpiryPopover: View {
+    var expiresAt: Date?
+    var renewsAt: Date?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            TimeInfoRow(title: "过期时间", date: expiresAt, valueWidth: 74)
+            TimeInfoRow(title: "续费时间", date: renewsAt, valueWidth: 74)
+        }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .frame(width: 146, alignment: .leading)
+            .background {
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(.regularMaterial)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .stroke(.white.opacity(0.22), lineWidth: 0.8)
+                    }
+                    .shadow(color: .black.opacity(0.14), radius: 9, x: 0, y: 3)
+            }
+    }
+}
+
 private struct ResetCreditsPopover: View {
     var credits: [ResetCreditInfo]
 
@@ -325,7 +379,7 @@ private struct ResetCreditsPopover: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 7)
-        .frame(width: 278, alignment: .leading)
+        .frame(width: 234, alignment: .leading)
         .background {
             RoundedRectangle(cornerRadius: 9, style: .continuous)
                 .fill(.regularMaterial)
@@ -341,8 +395,8 @@ private struct ResetCreditsPopover: View {
 private struct ResetCreditsHeader: View {
     var body: some View {
         HStack(spacing: 8) {
-            Text("标题")
-                .frame(maxWidth: .infinity, alignment: .leading)
+            Text("发放时间")
+                .frame(width: 102, alignment: .leading)
 
             Text("过期时间")
                 .frame(width: 102, alignment: .trailing)
@@ -357,13 +411,31 @@ private struct ResetCreditExpiryRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Text(credit.title ?? "--")
-                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(DateFormatter.codexResetCreditDateTime.stringOrPlaceholder(from: credit.grantedAt))
+                .frame(width: 102, alignment: .leading)
                 .lineLimit(1)
-                .truncationMode(.tail)
 
-            Text(DateFormatter.codexResetCreditMinute.stringOrPlaceholder(from: credit.expiresAt))
+            Text(DateFormatter.codexResetCreditDateTime.stringOrPlaceholder(from: credit.expiresAt))
                 .frame(width: 102, alignment: .trailing)
+                .monospacedDigit()
+        }
+        .font(.system(size: 10.5, weight: .medium, design: .rounded))
+        .foregroundStyle(.secondary)
+    }
+}
+
+private struct TimeInfoRow: View {
+    var title: String
+    var date: Date?
+    var valueWidth: CGFloat
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text(DateFormatter.codexResetCreditDateTime.stringOrPlaceholder(from: date))
+                .frame(width: valueWidth, alignment: .trailing)
                 .monospacedDigit()
         }
         .font(.system(size: 10.5, weight: .medium, design: .rounded))
@@ -998,11 +1070,11 @@ extension DateFormatter {
         return formatter
     }()
 
-    static let codexResetCreditMinute: DateFormatter = {
+    static let codexResetCreditDateTime: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
         formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
-        formatter.dateFormat = "yyyy-MM-dd HH:mm"
+        formatter.dateFormat = "M月d日 HH:mm"
         return formatter
     }()
 
