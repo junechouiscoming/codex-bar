@@ -117,7 +117,9 @@ struct CodexQuotaService: CodexQuotaFetching {
             ?? "Codex"
         let displayName = emptyToNil(profileInfo.displayName) ?? fallbackName
         let username = emptyToNil(profileInfo.username) ?? displayName
-        let monthlyTokenUsage = makeMonthlyTokenUsage(from: profile.stats) ?? tokenHistory.loadCurrentMonth()
+        let monthlyTokenUsages = makeMonthlyTokenUsages(from: profile.stats)
+        let usageMonths = monthlyTokenUsages.isEmpty ? tokenHistory.loadRecentMonths() : monthlyTokenUsages
+        let monthlyTokenUsage = usageMonths.last ?? tokenHistory.loadCurrentMonth()
 
         return QuotaSnapshot(
             username: username,
@@ -139,34 +141,83 @@ struct CodexQuotaService: CodexQuotaFetching {
             availableResetCount: resetCredits?.availableCount ?? usage.rateLimitResetCredits?.availableCount,
             resetCredits: makeResetCredits(from: resetCredits),
             monthlyTokenUsage: monthlyTokenUsage,
+            monthlyTokenUsages: usageMonths,
             fetchedAt: Date()
         )
     }
 
-    private func makeMonthlyTokenUsage(from stats: CodexProfileStats?) -> MonthlyTokenUsage? {
+    private func makeMonthlyTokenUsages(from stats: CodexProfileStats?) -> [MonthlyTokenUsage] {
         guard let buckets = stats?.dailyUsageBuckets, !buckets.isEmpty else {
-            return nil
+            return []
         }
 
         let calendar = Calendar.autoupdatingCurrent
         let now = Date()
-        let components = calendar.dateComponents([.year, .month], from: now)
-        let monthStart = calendar.date(from: components) ?? now
-        let dayRange = calendar.range(of: .day, in: .month, for: monthStart) ?? 1..<32
         let today = calendar.startOfDay(for: now)
-        var totalsByDay: [String: Int] = [:]
+        let currentMonthStart = startOfMonth(for: now, calendar: calendar)
+        var totalsByMonthAndDay: [String: [String: Int]] = [:]
+        var monthStartsByID: [String: Date] = [:]
 
         for bucket in buckets {
             guard
                 let date = DateFormatter.codexUsageDayID.date(from: bucket.startDate),
-                calendar.isDate(date, equalTo: monthStart, toGranularity: .month)
+                date <= today
             else {
                 continue
             }
 
+            let monthStart = startOfMonth(for: date, calendar: calendar)
+            let monthID = DateFormatter.codexUsageMonthID.string(from: monthStart)
             let id = DateFormatter.codexUsageDayID.string(from: date)
-            totalsByDay[id, default: 0] += max(0, bucket.tokens)
+            monthStartsByID[monthID] = monthStart
+            totalsByMonthAndDay[monthID, default: [:]][id, default: 0] += max(0, bucket.tokens)
         }
+
+        let currentMonthID = DateFormatter.codexUsageMonthID.string(from: currentMonthStart)
+        monthStartsByID[currentMonthID] = currentMonthStart
+        let monthStarts = continuousMonthStarts(
+            from: monthStartsByID.values.min() ?? currentMonthStart,
+            through: currentMonthStart,
+            calendar: calendar
+        )
+
+        return monthStarts
+            .map { monthStart in
+                makeMonthlyTokenUsage(
+                    monthStart: monthStart,
+                    totalsByDay: totalsByMonthAndDay[DateFormatter.codexUsageMonthID.string(from: monthStart)] ?? [:],
+                    lifetimeTokens: max(0, stats?.lifetimeTokens ?? 0),
+                    today: today,
+                    calendar: calendar
+                )
+            }
+    }
+
+    private func continuousMonthStarts(from firstMonthStart: Date, through lastMonthStart: Date, calendar: Calendar) -> [Date] {
+        var monthStarts: [Date] = []
+        var monthStart = firstMonthStart
+
+        while monthStart <= lastMonthStart {
+            monthStarts.append(monthStart)
+
+            guard let nextMonthStart = calendar.date(byAdding: .month, value: 1, to: monthStart) else {
+                break
+            }
+
+            monthStart = nextMonthStart
+        }
+
+        return monthStarts
+    }
+
+    private func makeMonthlyTokenUsage(
+        monthStart: Date,
+        totalsByDay: [String: Int],
+        lifetimeTokens: Int,
+        today: Date,
+        calendar: Calendar
+    ) -> MonthlyTokenUsage {
+        let dayRange = calendar.range(of: .day, in: .month, for: monthStart) ?? 1..<32
 
         let days = dayRange.compactMap { day -> DailyTokenUsage? in
             guard let date = calendar.date(byAdding: .day, value: day - 1, to: monthStart) else {
@@ -186,9 +237,14 @@ struct CodexQuotaService: CodexQuotaFetching {
             monthStart: monthStart,
             days: days,
             totalTokens: days.filter { !$0.isFuture }.reduce(0) { $0 + $1.tokens },
-            lifetimeTokens: max(0, stats?.lifetimeTokens ?? 0),
+            lifetimeTokens: lifetimeTokens,
             peakTokens: days.filter { !$0.isFuture }.map(\.tokens).max() ?? 0
         )
+    }
+
+    private func startOfMonth(for date: Date, calendar: Calendar) -> Date {
+        let components = calendar.dateComponents([.year, .month], from: date)
+        return calendar.date(from: components) ?? date
     }
 
     private func makeWindow(
@@ -263,7 +319,7 @@ struct CodexQuotaService: CodexQuotaFetching {
         switch value.lowercased() {
         case "plus":
             return "Plus"
-        case "pro":
+        case "pro", "prolite":
             return "Pro"
         case "free":
             return "Free"

@@ -15,6 +15,7 @@ struct QuotaPanelView: View {
         VStack(alignment: .leading, spacing: 10) {
             header
                 .zIndex(3)
+                .padding(.bottom, 5)
 
             VStack(spacing: 7) {
                 QuotaRow(window: store.snapshot.fiveHour, animationID: store.quotaAnimationID)
@@ -38,7 +39,10 @@ struct QuotaPanelView: View {
             Divider()
                 .opacity(0.45)
 
-            MonthlyTokenUsageSection(usage: store.snapshot.monthlyTokenUsage)
+            MonthlyTokenUsageSection(
+                usages: store.snapshot.monthlyTokenUsages,
+                panelPresentationID: store.panelPresentationID
+            )
                 .zIndex(0)
 
             Spacer(minLength: 4)
@@ -48,7 +52,7 @@ struct QuotaPanelView: View {
         .padding(.horizontal, 12)
         .padding(.top, 12)
         .padding(.bottom, 8)
-        .frame(width: 440, height: 282)
+        .frame(width: 440, height: 302)
         .overlay(alignment: .bottomTrailing) {
             intervalPickerOverlay
         }
@@ -67,32 +71,14 @@ struct QuotaPanelView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            HStack(spacing: 8) {
-                ProfileAvatarView(
-                    url: store.snapshot.avatarURL,
-                    displayName: store.snapshot.displayName
-                )
-
-                Text(store.snapshot.displayName)
-                    .font(.system(size: 13.5, weight: .medium, design: .rounded))
-                    .foregroundStyle(isProfileHovered ? .primary : .secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .layoutPriority(1)
-            }
-            .contentShape(Rectangle())
-            .background {
-                Capsule(style: .continuous)
-                    .fill(Color.primary.opacity(isProfileHovered ? 0.055 : 0))
-                    .padding(.horizontal, -5)
-                    .padding(.vertical, -4)
-            }
-            .onTapGesture {
+            ProfileBadge(
+                url: store.snapshot.avatarURL,
+                displayName: store.snapshot.displayName,
+                isHovered: $isProfileHovered
+            ) {
                 openCodexApp()
             }
-            .clickablePointer()
-            .onHover { isProfileHovered = $0 }
-            .help("打开 Codex")
+            .layoutPriority(1)
 
             Spacer()
 
@@ -304,26 +290,119 @@ private struct ResetCreditsSummary: View {
     }
 }
 
+private struct ProfileBadge: View {
+    var url: URL?
+    var displayName: String
+    @Binding var isHovered: Bool
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            ViewThatFits(in: .horizontal) {
+                content
+                    .fixedSize(horizontal: true, vertical: false)
+
+                content
+                    .frame(width: 250, alignment: .leading)
+            }
+            .background { profileBadgeBackground }
+            .clipShape(Capsule(style: .continuous))
+            .shadow(color: profileShadowColor, radius: isHovered ? 12 : 8, x: 0, y: isHovered ? 5 : 3)
+            .offset(y: isHovered ? -1 : 0)
+            .contentShape(Capsule(style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .clickablePointer()
+        .help("打开 Codex")
+        .animation(.easeInOut(duration: 0.16), value: isHovered)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+    }
+
+    private var profileBadgeBackground: some View {
+        ZStack {
+            Capsule(style: .continuous)
+                .fill(.ultraThinMaterial)
+
+            Capsule(style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            .white.opacity(0.22),
+                            .white.opacity(0.052),
+                            Color(red: 0.41, green: 0.78, blue: 0.87).opacity(0.08)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+
+            Capsule(style: .continuous)
+                .fill(.white.opacity(0.045))
+
+            Capsule(style: .continuous)
+                .stroke(.white.opacity(isHovered ? 0.34 : 0.22), lineWidth: 0.9)
+
+            Capsule(style: .continuous)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [.white.opacity(0.34), .clear, .white.opacity(0.08)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 1
+                )
+        }
+    }
+
+    private var profileShadowColor: Color {
+        isHovered
+            ? Color(red: 0.41, green: 0.78, blue: 0.87).opacity(0.18)
+            : .black.opacity(0.12)
+    }
+
+    private var content: some View {
+        HStack(spacing: 7) {
+            ProfileAvatarView(url: url, displayName: displayName)
+
+            Text(displayName)
+                .font(.system(size: 13.2, weight: .semibold, design: .rounded))
+                .foregroundStyle(.primary.opacity(isHovered ? 0.86 : 0.68))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .layoutPriority(1)
+        }
+        .padding(.leading, 4)
+        .padding(.trailing, 12)
+        .frame(height: 28)
+    }
+}
+
 private struct PlanBadge: View {
     var planName: String
     var expiresAt: Date?
     var renewsAt: Date?
     @Binding var isHovered: Bool
+    @State private var sweepPosition: CGFloat = -0.95
+    @State private var sweepTask: Task<Void, Never>?
 
     var body: some View {
         Text(planName)
-            .font(.system(size: 12, weight: .semibold, design: .rounded))
-            .foregroundStyle(Color(red: 0.08, green: 0.34, blue: 0.28))
-            .padding(.horizontal, 9)
-            .padding(.vertical, 5)
-            .background {
-                Capsule(style: .continuous)
-                    .fill(Color(red: 0.78, green: 0.94, blue: 0.88).opacity(0.95))
-            }
+            .font(.system(size: 11.5, weight: .bold, design: .rounded))
+            .monospacedDigit()
+            .foregroundStyle(.primary.opacity(0.82))
+            .padding(.horizontal, 12)
+            .frame(minWidth: 52)
+            .frame(height: 28)
+            .background { badgeBackground }
+            .clipShape(Capsule(style: .continuous))
+            .shadow(color: badgeShadowColor, radius: isHovered ? 13 : 9, x: 0, y: isHovered ? 6 : 4)
+            .offset(y: isHovered ? -1 : 0)
             .contentShape(Capsule(style: .continuous))
             .overlay(alignment: .topTrailing) {
                 PlanExpiryPopover(expiresAt: expiresAt, renewsAt: renewsAt)
-                    .offset(y: 32)
+                    .offset(y: 30)
                     .opacity(isHovered ? 1 : 0)
                     .allowsHitTesting(false)
                     .zIndex(4)
@@ -332,6 +411,99 @@ private struct PlanBadge: View {
             .onHover { hovering in
                 isHovered = hovering
             }
+            .onAppear {
+                startSweep()
+            }
+            .onDisappear {
+                sweepTask?.cancel()
+                sweepTask = nil
+            }
+    }
+
+    private var badgeBackground: some View {
+        ZStack {
+            Capsule(style: .continuous)
+                .fill(.ultraThinMaterial)
+
+            Capsule(style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            .white.opacity(0.24),
+                            .white.opacity(0.055),
+                            Color(red: 0.41, green: 0.78, blue: 0.87).opacity(0.10)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+
+            Capsule(style: .continuous)
+                .fill(.white.opacity(0.052))
+
+            GeometryReader { proxy in
+                Rectangle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                .clear,
+                                .white.opacity(0.34),
+                                Color(red: 0.41, green: 0.78, blue: 0.87).opacity(0.13),
+                                .clear
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(width: proxy.size.width * 1.24, height: proxy.size.height * 2.1)
+                    .rotationEffect(.degrees(-18))
+                    .offset(x: proxy.size.width * sweepPosition, y: -proxy.size.height * 0.52)
+                    .blendMode(.screen)
+                    .opacity(0.54)
+            }
+
+            Capsule(style: .continuous)
+                .stroke(.white.opacity(isHovered ? 0.34 : 0.22), lineWidth: 0.9)
+
+            Capsule(style: .continuous)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [.white.opacity(0.34), .clear, .white.opacity(0.08)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 1
+                )
+        }
+    }
+
+    private var badgeShadowColor: Color {
+        isHovered
+            ? Color(red: 0.41, green: 0.78, blue: 0.87).opacity(0.20)
+            : .black.opacity(0.16)
+    }
+
+    private func startSweep() {
+        guard sweepTask == nil else {
+            return
+        }
+
+        sweepTask = Task { @MainActor in
+            while !Task.isCancelled {
+                sweepPosition = -0.95
+
+                try? await Task.sleep(for: .milliseconds(520))
+                if Task.isCancelled {
+                    return
+                }
+
+                withAnimation(.timingCurve(0.34, 0, 0.22, 1, duration: 1.65)) {
+                    sweepPosition = 0.95
+                }
+
+                try? await Task.sleep(for: .milliseconds(2450))
+            }
+        }
     }
 }
 
@@ -347,15 +519,7 @@ private struct PlanExpiryPopover: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
             .frame(width: 146, alignment: .leading)
-            .background {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(.regularMaterial)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .stroke(.white.opacity(0.22), lineWidth: 0.8)
-                    }
-                    .shadow(color: .black.opacity(0.14), radius: 9, x: 0, y: 3)
-            }
+            .codexPopoverSurface()
     }
 }
 
@@ -380,15 +544,7 @@ private struct ResetCreditsPopover: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 7)
         .frame(width: 234, alignment: .leading)
-        .background {
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(.regularMaterial)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .stroke(.white.opacity(0.22), lineWidth: 0.8)
-                }
-                .shadow(color: .black.opacity(0.14), radius: 9, x: 0, y: 3)
-        }
+        .codexPopoverSurface()
     }
 }
 
@@ -526,15 +682,7 @@ struct RefreshIntervalPicker: View {
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 5)
-        .background {
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(.regularMaterial)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .stroke(.white.opacity(0.22), lineWidth: 0.8)
-                }
-                .shadow(color: .black.opacity(0.14), radius: 9, x: 0, y: 3)
-        }
+        .codexPopoverSurface()
     }
 
     private func intervalOption(_ minutes: Int) -> some View {
@@ -681,14 +829,21 @@ struct QuotaRow: View {
 }
 
 struct MonthlyTokenUsageSection: View {
-    var usage: MonthlyTokenUsage
+    var usages: [MonthlyTokenUsage]
+    var panelPresentationID: Int
+    @State private var selectedMonthID: String?
+    @State private var pageDirection = MonthPageDirection.next
 
     var body: some View {
+        let visibleUsages = normalizedUsages
+        let index = selectedIndex(in: visibleUsages)
+        let usage = visibleUsages[index]
+
         VStack(alignment: .leading, spacing: 7) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 5) {
-                    UsageMetric(title: "昨日使用", value: tokenText(yesterdayTokens))
-                    UsageMetric(title: "本月日均", value: tokenText(averageDailyTokens))
+                    UsageMetric(title: firstMetricTitle(for: usage), value: tokenText(firstMetricTokens(for: usage, in: visibleUsages)))
+                    UsageMetric(title: averageMetricTitle(for: usage), value: tokenText(averageDailyTokens(for: usage)))
                 }
 
                 Spacer()
@@ -700,9 +855,30 @@ struct MonthlyTokenUsageSection: View {
             }
 
             HStack(alignment: .firstTextBaseline) {
-                Text(DateFormatter.codexUsageMonthTitle.string(from: usage.monthStart))
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 0) {
+                    monthButton(
+                        systemName: "chevron.left",
+                        isEnabled: index > visibleUsages.startIndex,
+                        help: "上个月"
+                    ) {
+                        selectMonth(offset: -1, in: visibleUsages)
+                    }
+
+                    Text(DateFormatter.codexUsageMonthTitle.string(from: usage.monthStart))
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                        .frame(minWidth: 28)
+
+                    monthButton(
+                        systemName: "chevron.right",
+                        isEnabled: index < visibleUsages.index(before: visibleUsages.endIndex),
+                        help: "下个月"
+                    ) {
+                        selectMonth(offset: 1, in: visibleUsages)
+                    }
+                }
+                .padding(.leading, -4)
 
                 Spacer()
 
@@ -711,21 +887,133 @@ struct MonthlyTokenUsageSection: View {
                     .foregroundStyle(.tertiary)
             }
 
-            TokenUsageStrip(usage: usage)
+            ZStack {
+                TokenUsageStrip(usage: usage)
+                    .id(usage.id)
+                    .transition(pageTransition)
+            }
+            .animation(.easeInOut(duration: 0.24), value: usage.id)
                 .frame(height: 46)
+        }
+        .onAppear {
+            ensureSelectedMonth(in: visibleUsages)
+        }
+        .onChange(of: visibleUsages.map(\.id)) { _, _ in
+            ensureSelectedMonth(in: normalizedUsages)
+        }
+        .onChange(of: panelPresentationID) { _, _ in
+            resetToCurrentMonth(in: normalizedUsages)
         }
     }
 
-    private var yesterdayTokens: Int {
+    private var normalizedUsages: [MonthlyTokenUsage] {
+        let sortedUsages = usages.sorted { $0.monthStart < $1.monthStart }
+        return sortedUsages.isEmpty ? [.placeholder] : sortedUsages
+    }
+
+    private var pageTransition: AnyTransition {
+        .asymmetric(
+            insertion: .move(edge: pageDirection.insertionEdge).combined(with: .opacity),
+            removal: .move(edge: pageDirection.removalEdge).combined(with: .opacity)
+        )
+    }
+
+    private func selectedIndex(in usages: [MonthlyTokenUsage]) -> Int {
+        guard
+            let selectedMonthID,
+            let index = usages.firstIndex(where: { $0.id == selectedMonthID })
+        else {
+            return max(usages.startIndex, usages.index(before: usages.endIndex))
+        }
+
+        return index
+    }
+
+    private func selectMonth(offset: Int, in usages: [MonthlyTokenUsage]) {
+        let currentIndex = selectedIndex(in: usages)
+        let newIndex = currentIndex + offset
+        guard usages.indices.contains(newIndex) else {
+            return
+        }
+
+        pageDirection = offset < 0 ? .previous : .next
+        withAnimation(.easeInOut(duration: 0.24)) {
+            selectedMonthID = usages[newIndex].id
+        }
+    }
+
+    private func ensureSelectedMonth(in usages: [MonthlyTokenUsage]) {
+        guard !usages.isEmpty else {
+            selectedMonthID = nil
+            return
+        }
+
+        if let selectedMonthID, usages.contains(where: { $0.id == selectedMonthID }) {
+            return
+        }
+
+        selectedMonthID = usages.last?.id
+    }
+
+    private func resetToCurrentMonth(in usages: [MonthlyTokenUsage]) {
+        guard !usages.isEmpty else {
+            selectedMonthID = nil
+            return
+        }
+
+        pageDirection = .next
+        selectedMonthID = usages.last?.id
+    }
+
+    @ViewBuilder
+    private func monthButton(
+        systemName: String,
+        isEnabled: Bool,
+        help: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        MonthArrowButton(
+            systemName: systemName,
+            isEnabled: isEnabled,
+            help: help,
+            action: action
+        )
+    }
+
+    private func firstMetricTitle(for usage: MonthlyTokenUsage) -> String {
+        isCurrentMonth(usage) ? "昨日使用" : "末日使用"
+    }
+
+    private func firstMetricTokens(for usage: MonthlyTokenUsage, in usages: [MonthlyTokenUsage]) -> Int {
+        if isCurrentMonth(usage) {
+            return yesterdayTokens(in: usages)
+        }
+
+        return usage.days.last(where: { !$0.isFuture })?.tokens ?? 0
+    }
+
+    private func averageMetricTitle(for usage: MonthlyTokenUsage) -> String {
+        isCurrentMonth(usage) ? "本月日均" : "当月日均"
+    }
+
+    private func isCurrentMonth(_ usage: MonthlyTokenUsage) -> Bool {
+        Calendar.autoupdatingCurrent.isDate(usage.monthStart, equalTo: Date(), toGranularity: .month)
+    }
+
+    private func yesterdayTokens(in usages: [MonthlyTokenUsage]) -> Int {
         let calendar = Calendar.autoupdatingCurrent
         guard let yesterday = calendar.date(byAdding: .day, value: -1, to: Date()) else {
             return 0
         }
 
-        return usage.days.first { calendar.isDate($0.date, inSameDayAs: yesterday) }?.tokens ?? 0
+        return usages
+            .lazy
+            .flatMap(\.days)
+            .first { calendar.isDate($0.date, inSameDayAs: yesterday) }?
+            .tokens ?? 0
     }
 
-    private var averageDailyTokens: Int {
+    private func averageDailyTokens(for usage: MonthlyTokenUsage) -> Int {
         let visibleDays = usage.days.filter { !$0.isFuture }
         guard !visibleDays.isEmpty else {
             return 0
@@ -749,6 +1037,72 @@ struct MonthlyTokenUsageSection: View {
     private func compact(_ value: Double, suffix: String) -> String {
         let text = String(format: value >= 10 ? "%.0f" : "%.1f", value)
         return text.replacingOccurrences(of: ".0", with: "") + suffix
+    }
+}
+
+private struct MonthArrowButton: View {
+    var systemName: String
+    var isEnabled: Bool
+    var help: String
+    var action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button {
+            guard isEnabled else {
+                return
+            }
+
+            action()
+        } label: {
+            Image(systemName: systemName)
+                .font(.system(size: 8.5, weight: .bold))
+                .foregroundStyle(isEnabled ? .secondary : .quaternary)
+                .frame(width: 22, height: 20)
+                .background {
+                    Capsule(style: .continuous)
+                        .fill(Color.primary.opacity(isHovered && isEnabled ? 0.07 : 0))
+                }
+        }
+        .buttonStyle(.plain)
+        .frame(width: 22, height: 20)
+        .contentShape(Rectangle())
+        .opacity(isEnabled ? 1 : 0.42)
+        .onHover { hovering in
+            isHovered = hovering && isEnabled
+
+            if hovering && isEnabled {
+                NSCursor.pointingHand.set()
+            } else {
+                NSCursor.arrow.set()
+            }
+        }
+        .allowsHitTesting(isEnabled)
+        .help(help)
+    }
+}
+
+private enum MonthPageDirection {
+    case previous
+    case next
+
+    var insertionEdge: Edge {
+        switch self {
+        case .previous:
+            return .leading
+        case .next:
+            return .trailing
+        }
+    }
+
+    var removalEdge: Edge {
+        switch self {
+        case .previous:
+            return .trailing
+        case .next:
+            return .leading
+        }
     }
 }
 
@@ -818,13 +1172,10 @@ struct TokenUsageStrip: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 5)
                         .frame(width: tooltipWidth)
-                        .background {
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(.regularMaterial)
-                                .shadow(color: .black.opacity(0.16), radius: 8, x: 0, y: 3)
-                        }
+                        .codexPopoverSurface(cornerRadius: 7)
                         .offset(x: x, y: -32)
                         .transition(.opacity)
+                        .allowsHitTesting(false)
                         .zIndex(2)
                 }
             }
@@ -833,6 +1184,10 @@ struct TokenUsageStrip: View {
 
     private func tooltip(for day: DailyTokenUsage) -> String {
         let date = DateFormatter.codexUsageTooltipDate.string(from: day.date)
+        guard day.tokens > 0 else {
+            return "\(date)：未使用"
+        }
+
         let tokens = tokenText(day.tokens)
         return "\(date)：已使用 \(tokens) token"
     }
@@ -886,31 +1241,98 @@ private extension View {
         modifier(ClickablePointerModifier())
     }
 
-    @ViewBuilder
-    func liquidGlassPanel(cornerRadius: CGFloat) -> some View {
-        if #available(macOS 26.0, *) {
-            self
-                .background {
-                    VisualEffectBackdrop(material: .popover, blendingMode: .behindWindow)
-                        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-                        .opacity(0.78)
-                }
-                .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+    func codexPopoverSurface(cornerRadius: CGFloat = 9) -> some View {
+        background {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(Color(nsColor: .windowBackgroundColor))
                 .overlay {
                     RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .stroke(.white.opacity(0.18), lineWidth: 0.8)
+                        .fill(Color.primary.opacity(0.018))
                 }
-        } else {
-            self
-                .background {
-                    VisualEffectBackdrop(material: .popover, blendingMode: .behindWindow)
-                        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-                        .opacity(0.78)
-                        .overlay {
-                            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                                .stroke(.white.opacity(0.18), lineWidth: 0.8)
-                        }
+                .overlay {
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .stroke(.white.opacity(0.24), lineWidth: 0.8)
                 }
+                .shadow(color: .black.opacity(0.14), radius: 9, x: 0, y: 3)
+        }
+    }
+
+    func liquidGlassPanel(cornerRadius: CGFloat) -> some View {
+        modifier(CodexPanelGlassModifier(cornerRadius: cornerRadius))
+    }
+}
+
+private struct CodexPanelGlassModifier: ViewModifier {
+    var cornerRadius: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .background {
+                panelBackground
+            }
+            .clipShape(panelShape)
+            .overlay {
+                panelBorder
+            }
+    }
+
+    private var panelShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+    }
+
+    private var panelBackground: some View {
+        ZStack {
+            VisualEffectBackdrop(material: .popover, blendingMode: .behindWindow)
+                .opacity(0.82)
+
+            panelShape
+                .fill(Color(nsColor: .windowBackgroundColor).opacity(0.24))
+
+            panelShape
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            .white.opacity(0.12),
+                            .white.opacity(0.030),
+                            Color(red: 0.41, green: 0.78, blue: 0.87).opacity(0.020)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+
+            panelShape
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color(red: 0.95, green: 0.98, blue: 1.00).opacity(0.16),
+                            .clear
+                        ],
+                        center: .topTrailing,
+                        startRadius: 6,
+                        endRadius: 260
+                    )
+                )
+
+            panelShape
+                .fill(.white.opacity(0.018))
+        }
+    }
+
+    private var panelBorder: some View {
+        ZStack {
+            panelShape
+                .stroke(.white.opacity(0.24), lineWidth: 0.9)
+
+            panelShape
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [.white.opacity(0.34), .clear, .black.opacity(0.05)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 1
+                )
         }
     }
 }

@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.3 - 2026-07-01
+
+### English
+
+- Added month navigation for daily token bars, with cross-month yesterday usage.
+- Refined the glass panel, profile badge, plan badge, and token hover popovers.
+- Mapped `prolite` plans to `Pro`.
+
+### 中文
+
+- 新增每日 token 柱状图月份切换，并修复跨月昨日使用统计。
+- 优化玻璃面板、头像标签、套餐标签和 token 悬停气泡。
+- 将 `prolite` 套餐显示为 `Pro`。
+
 ## 1.2.1 - 2026-06-29
 
 ### English

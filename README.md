@@ -13,12 +13,12 @@ login stored by the Codex app or CLI.
 ### Features
 
 - Menu bar icon with the current 5-hour quota percentage.
-- Anchored macOS-style panel with avatar, username, and subscription tier.
+- Anchored macOS-style glass panel with profile and plan badges.
 - Segmented quota bars for the 5-hour limit and weekly limit.
 - Reset time display for each quota window.
 - Available reset credit count with a hover table for grant and expiry times.
 - Plan badge hover popover with subscription expiry and renewal times.
-- Monthly token heatmap with instant hover tooltips.
+- Monthly token bar chart with month navigation and hover tooltips.
 - Usage summary for yesterday, this month's daily average, monthly total, and
   all-time total.
 - Manual refresh button with a smooth refresh-time transition.
@@ -54,13 +54,13 @@ open dist/CodexBar.app
 Build a release DMG:
 
 ```bash
-scripts/build-dmg.sh 1.2.1
+scripts/build-dmg.sh 1.3
 ```
 
 The DMG is written to:
 
 ```text
-release/CodexBar-1.2.1-arm64.dmg
+release/CodexBar-1.3-arm64.dmg
 ```
 
 ## 中文
@@ -72,12 +72,12 @@ Codex 登录信息，在菜单栏展示 Codex 额度，并通过一个紧凑的 
 ### 功能
 
 - 菜单栏图标展示当前 5 小时额度百分比。
-- 点击菜单栏图标弹出吸附式面板，展示头像、用户名和订阅等级。
+- 点击菜单栏图标弹出吸附式玻璃面板，展示头像标签和套餐标签。
 - 用分段色块展示 5 小时额度和周限额。
 - 显示每个额度窗口的重置时间。
 - 显示剩余可用重置次数，鼠标悬停可查看每个重置额度的发放时间和过期时间。
 - 套餐标签支持悬停查看订阅过期时间和续费时间。
-- 展示当月 token 使用热力图，鼠标划过色块会立即显示当日用量。
+- 展示每日 token 柱状图，支持月份切换和鼠标悬停查看当日用量。
 - 展示昨日使用、本月日均、当月累计和总累计 token。
 - 支持手动刷新，并带有刷新时间的渐隐切换。
 - 支持设置后台刷新间隔：1、5、15、30 分钟。
@@ -110,11 +110,11 @@ open dist/CodexBar.app
 构建发布用 DMG：
 
 ```bash
-scripts/build-dmg.sh 1.2.1
+scripts/build-dmg.sh 1.3
 ```
 
 DMG 输出位置：
 
 ```text
-release/CodexBar-1.2.1-arm64.dmg
+release/CodexBar-1.3-arm64.dmg
 ```

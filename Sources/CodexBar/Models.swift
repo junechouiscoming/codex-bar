@@ -12,6 +12,7 @@ struct QuotaSnapshot: Equatable {
     var availableResetCount: Int?
     var resetCredits: [ResetCreditInfo]
     var monthlyTokenUsage: MonthlyTokenUsage
+    var monthlyTokenUsages: [MonthlyTokenUsage]
     var fetchedAt: Date
 }
 
@@ -48,6 +49,10 @@ struct MonthlyTokenUsage: Equatable {
     var totalTokens: Int
     var lifetimeTokens: Int
     var peakTokens: Int
+
+    var id: String {
+        DateFormatter.codexUsageMonthID.string(from: monthStart)
+    }
 }
 
 struct DailyTokenUsage: Equatable, Identifiable {
@@ -81,6 +86,7 @@ extension QuotaSnapshot {
             availableResetCount: nil,
             resetCredits: [],
             monthlyTokenUsage: .placeholder,
+            monthlyTokenUsages: [.placeholder],
             fetchedAt: Date()
         )
     }
@@ -119,6 +125,14 @@ extension MonthlyTokenUsage {
 }
 
 extension DateFormatter {
+    static let codexUsageMonthID: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.dateFormat = "yyyy-MM"
+        return formatter
+    }()
+
     static let codexUsageDayID: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
