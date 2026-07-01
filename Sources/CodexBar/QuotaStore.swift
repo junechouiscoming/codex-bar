@@ -6,6 +6,7 @@ final class QuotaStore: ObservableObject {
     @Published private(set) var isRefreshing = false
     @Published private(set) var errorMessage: String?
     @Published private(set) var quotaAnimationID = 0
+    @Published private(set) var panelPresentationID = 0
     @Published private(set) var refreshIntervalMinutes: Int
 
     private let service: any CodexQuotaFetching
@@ -46,6 +47,10 @@ final class QuotaStore: ObservableObject {
 
     func replayQuotaAnimation() {
         quotaAnimationID &+= 1
+    }
+
+    func markPanelPresented() {
+        panelPresentationID &+= 1
     }
 
     func setRefreshInterval(minutes: Int) {

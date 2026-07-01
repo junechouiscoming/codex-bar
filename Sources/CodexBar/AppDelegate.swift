@@ -7,7 +7,7 @@ import UserNotifications
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     private enum PanelMetrics {
-        static let size = NSSize(width: 440, height: 282)
+        static let size = NSSize(width: 440, height: 302)
     }
 
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -144,6 +144,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             panel.animator().alphaValue = 1
         }
         AppLog.write("anchored panel shown frame=\(panel.frame.debugDescription)")
+        store.markPanelPresented()
         store.replayQuotaAnimation()
     }
 

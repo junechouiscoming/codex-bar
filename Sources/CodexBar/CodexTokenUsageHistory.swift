@@ -2,15 +2,42 @@ import Foundation
 
 struct CodexTokenUsageHistory: Sendable {
     func loadCurrentMonth() -> MonthlyTokenUsage {
+        loadMonth(containing: Date())
+    }
+
+    func loadRecentMonths(limit: Int = 12) -> [MonthlyTokenUsage] {
         let calendar = Calendar.autoupdatingCurrent
         let now = Date()
         let components = calendar.dateComponents([.year, .month], from: now)
-        let monthStart = calendar.date(from: components) ?? now
+        let currentMonthStart = calendar.date(from: components) ?? now
+        let monthStarts = (0..<max(1, limit)).compactMap { offset in
+            calendar.date(byAdding: .month, value: -offset, to: currentMonthStart)
+        }
+
+        let months = Array(monthStarts
+            .map { loadMonth(containing: $0, calendar: calendar) }
+            .reversed())
+        let lifetimeTokens = months.reduce(0) { $0 + $1.totalTokens }
+
+        return months.map { usage in
+            var usage = usage
+            usage.lifetimeTokens = lifetimeTokens
+            return usage
+        }
+    }
+
+    func loadMonth(containing date: Date) -> MonthlyTokenUsage {
+        loadMonth(containing: date, calendar: Calendar.autoupdatingCurrent)
+    }
+
+    private func loadMonth(containing date: Date, calendar: Calendar) -> MonthlyTokenUsage {
+        let components = calendar.dateComponents([.year, .month], from: date)
+        let monthStart = calendar.date(from: components) ?? date
         let dayRange = calendar.range(of: .day, in: .month, for: monthStart) ?? 1..<32
-        let today = calendar.startOfDay(for: now)
+        let today = calendar.startOfDay(for: Date())
         var totalsByDay: [String: Int] = [:]
 
-        for fileURL in currentMonthSessionFiles(monthStart: monthStart, calendar: calendar) {
+        for fileURL in monthSessionFiles(monthStart: monthStart, calendar: calendar) {
             accumulateTokenUsage(from: fileURL, monthStart: monthStart, calendar: calendar, into: &totalsByDay)
         }
 
@@ -40,7 +67,7 @@ struct CodexTokenUsageHistory: Sendable {
         )
     }
 
-    private func currentMonthSessionFiles(monthStart: Date, calendar: Calendar) -> [URL] {
+    private func monthSessionFiles(monthStart: Date, calendar: Calendar) -> [URL] {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let codexDirectory = home.appending(path: ".codex", directoryHint: .isDirectory)
         let components = calendar.dateComponents([.year, .month], from: monthStart)
